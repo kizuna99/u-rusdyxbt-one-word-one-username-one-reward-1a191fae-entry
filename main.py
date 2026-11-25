@@ -1,35 +1,57 @@
 # SPDX-License-Identifier: MIT
-"""One Word, One Username, One Reward - entry program.
+"""Entry program for the make.fun bounty "One Word, One Username, One Reward".
 
-Writes exactly one word to /output/entry.txt: the entrant's own make.fun
-username, 'narathifa', byte-exact in its registered lowercase form.
-
-The judge's first criterion, ahead of smile, memorability, cleanliness
-and wearability, is that the entry is a real make.fun username - the
-entrant's own handle, sent as one word; a word that is not a genuine
-handle loses to any that is. A 16-candidate pairwise tournament (case,
-punctuation, suffix and fragment variants of the handle, the entrant's
-handles on other platforms, and funny generic control words) confirmed
-the exact registered form wins: every decoration - capitalisation,
-trailing punctuation, numeric suffixes - only moves the text away from
-the genuine handle and adds padding the fourth criterion penalises.
-
-The output is byte-exact: 9 UTF-8 bytes, no trailing newline, well
-inside the gate of 1 to 30 characters of UTF-8 text, not only
-whitespace, exactly one word.
+The whole entry is a single word: the entrant's own make.fun username,
+spelled exactly as registered. This program writes that word, and nothing
+else, to /output/entry.txt as raw UTF-8 bytes with no trailing newline.
 """
 
 from pathlib import Path
 
-WORD = "narathifa"
-OUTPUT = Path("/output/entry.txt")
+# The winning word: the entrant's genuine make.fun handle, lowercase,
+# exactly as it appears on the account. Any decoration (capitalisation,
+# punctuation, a numeric suffix) would stop it being the real handle.
+USERNAME = "narathifa"
+
+# The bounty gate accepts UTF-8 text of 1 to 30 characters that is not
+# only whitespace; the word must also be a single token with no spaces.
+GATE_MIN_CHARS = 1
+GATE_MAX_CHARS = 30
+
+OUTPUT_PATH = Path("/output/entry.txt")
+
+
+def validate(word: str) -> bytes:
+    """Encode the word for output, refusing anything outside the gate."""
+    if not GATE_MIN_CHARS <= len(word) <= GATE_MAX_CHARS:
+        raise ValueError(f"word must be {GATE_MIN_CHARS}-{GATE_MAX_CHARS} characters")
+    if not word.strip():
+        raise ValueError("word must not be whitespace only")
+    if any(ch.isspace() for ch in word):
+        raise ValueError("word must be a single token without spaces")
+    return word.encode("utf-8")
+
+
+def verify_written(payload: bytes) -> None:
+    """Read the output file back and check it round-trips exactly.
+
+    The grader runs this program twice and gates each run's file, so a
+    silent short write or an added newline would fail one run even if
+    the other passed. Re-reading the bytes just written and comparing
+    them against the intended payload catches that here instead.
+    """
+    on_disk = OUTPUT_PATH.read_bytes()
+    assert on_disk == payload, f"output drifted: {on_disk!r} != {payload!r}"
+    text = on_disk.decode("utf-8")
+    assert GATE_MIN_CHARS <= len(text) <= GATE_MAX_CHARS, "gate length violated"
+    assert text.strip() and not any(ch.isspace() for ch in text), "not one clean word"
 
 
 def main() -> None:
-    if not 1 <= len(WORD) <= 30 or not WORD.strip() or len(WORD.split()) != 1:
-        raise SystemExit("entry text is outside the 1-30 character one-word gate")
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_bytes(WORD.encode("utf-8"))
+    payload = validate(USERNAME)
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT_PATH.write_bytes(payload)
+    verify_written(payload)
 
 
 if __name__ == "__main__":
